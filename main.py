@@ -4,6 +4,8 @@ from datetime import date, datetime
 import numpy as np
 import sqlite3
 import matplotlib.pyplot as plt
+from ttkthemes import ThemedStyle
+
 
 
 # Define the default expense categories
@@ -21,7 +23,10 @@ expense_names = [
 window = tk.Tk()
 window.title("Salary Tracker")
 window.geometry("800x1200")
-window.config(padx=20, pady=20)
+
+# Create a themed style object for customizing the ttk widgets
+style = ThemedStyle(window)
+style.set_theme("arc")  # Use the 'arc' theme, which resembles Material Design
 
 
 # Connect to the database
@@ -200,7 +205,7 @@ def plot_income_breakdown():
 # Function to plot the expense breakdown using a pie chart
 def plot_expense_pie():
     # Retrieve expense data from the database
-    cursor.execute("SELECT name, amount FROM expenses")
+    cursor.execute("SELECT name, amount FROM expenses WHERE name NOT IN ('Income', 'Salary')")
     expenses = cursor.fetchall()
 
     # Separate expense names and amounts
