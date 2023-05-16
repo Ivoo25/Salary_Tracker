@@ -79,7 +79,10 @@ def update_balance():
             connection.commit()
             balance = salary + get_total_income() - get_total_expenses()
 
-    label_balance.config(text=f"Current Balance: ${balance:.2f}" if isinstance(balance, float) else f"Current Balance: {balance}")
+    label_balance.config(text=f"Current Balance: €{balance:.2f}" if isinstance(balance, float) else f"Current Balance: {balance}")
+
+
+
 
 # Function to prompt the user for the salary
 def prompt_salary():
@@ -87,19 +90,19 @@ def prompt_salary():
 
 # Function to get the total expenses
 def get_total_expenses():
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name!='Salary'")
-    total_expenses = cursor.fetchone()[0] or 0
-    return total_expenses
+    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name!='Income'")
+    total_expenses = cursor.fetchone()[0] or 0.0
+    return float(total_expenses)
 
 # Function to get the total income
 def get_total_income():
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name='Income'")
-    total_income = cursor.fetchone()[0] or 0
-    return total_income
+    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name IN ('Income', 'Salary')")
+    total_income = cursor.fetchone()[0] or 0.0
+    return float(total_income)
 
 # Function to update the expense history
 def update_expense_history():
-    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name!='Income' ORDER BY date DESC LIMIT 5")
+    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name NOT IN ('Salary', 'Income') ORDER BY date DESC LIMIT 5")
     expenses = cursor.fetchall()
     text_expense_history.config(state=tk.NORMAL)
     text_expense_history.delete("1.0", tk.END)
@@ -111,7 +114,8 @@ def update_expense_history():
 
 # Function to update the income history
 def update_income_history():
-    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name='Income' ORDER BY date DESC LIMIT 5")
+    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name IN ('Income', 'Salary') ORDER BY date DESC LIMIT 5")
+    
     incomes = cursor.fetchall()
     text_income_history.config(state=tk.NORMAL)
     text_income_history.delete("1.0", tk.END)
@@ -132,11 +136,11 @@ def add_expense():
                        (name, amount, details, today))
         connection.commit()
         update_balance()
-        update_expense_history
+        update_expense_history()
 
 #Function to add an income        
 def add_income():
-    name = "Income"
+    name = "Salary"
     amount = simpledialog.askfloat("Add Income", "How much income did you receive?")
     if amount is not None:
         today = date.today()
@@ -144,7 +148,7 @@ def add_income():
         cursor.execute("INSERT INTO expenses (name, amount, details, date) VALUES (?, ?, ?, ?)",
                        (name, amount, details, today))
         connection.commit()
-        update_balance()
+        update_balance()  # Update the balance after adding the income entry
         update_income_history()
 
 # Function to reset the app and erase all data
@@ -163,7 +167,7 @@ def reset_app():
 
 # Function to plot the expense breakdown
 def plot_expense_breakdown():
-    cursor.execute("SELECT name, SUM(amount) FROM expenses WHERE name!='Income' GROUP BY name")
+    cursor.execute("SELECT name, SUM(amount) FROM expenses WHERE name NOT IN ('Income', 'Salary') GROUP BY name")
     expense_breakdown = cursor.fetchall()
     categories = [expense[0] for expense in expense_breakdown]
     amounts = [expense[1] for expense in expense_breakdown]
@@ -173,6 +177,22 @@ def plot_expense_breakdown():
     ax.set_xlabel('Expense Categories')
     ax.set_ylabel('Amount')
     ax.set_title('Expense Breakdown')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+# Function to plot the income breakdown by month
+def plot_income_breakdown():
+    cursor.execute("SELECT strftime('%Y-%m', date) AS month, SUM(amount) FROM expenses WHERE name IN ('Income', 'Salary') GROUP BY month")
+    income_breakdown = cursor.fetchall()
+    months = [income[0] for income in income_breakdown]
+    amounts = [income[1] for income in income_breakdown]
+
+    plt.figure(figsize=(8, 6))
+    plt.bar(months, amounts)
+    plt.xlabel('Month')
+    plt.ylabel('Income')
+    plt.title('Income Breakdown by Month')
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
@@ -225,6 +245,9 @@ frame_income_history.pack(pady=20, fill='both', expand=True)
 
 text_income_history = scrolledtext.ScrolledText(frame_income_history, width=40, height=10)
 text_income_history.pack(fill='both', expand=True)
+
+button_plot_income = tk.Button(tab_income, text="Plot Income Breakdown", command=plot_income_breakdown)
+button_plot_income.pack(pady=10)
 
 # Create the expenses tab
 tab_expenses = ttk.Frame(window)
