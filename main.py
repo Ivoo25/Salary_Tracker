@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, scrolledtext
 from datetime import date, datetime
 import numpy as np
 import sqlite3
@@ -13,13 +13,14 @@ expense_names = [
     "Food",
     "Gym",
     "Eating Out",
-    "Health"
+    "Health",
+    "Other"
 ]
 
 # Create the main window
 window = tk.Tk()
 window.title("Salary Tracker")
-window.geometry("600x600")
+window.geometry("800x1200")
 window.config(padx=20, pady=20)
 
 
@@ -43,27 +44,58 @@ cursor.execute(
 connection.commit()
 
 
-# Function to update the balance label
 def update_balance():
-    # Get the sum of all income entries
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name='Income'")
-    total_income = cursor.fetchone()[0] or 0
-    
-    # Get the sum of all expense entries
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name!='Income'")
-    total_expenses = cursor.fetchone()[0] or 0
-    
-    balance = total_income - total_expenses
-    
+    # Get the last salary entry
+    cursor.execute("SELECT amount FROM expenses WHERE name='Salary' ORDER BY date DESC LIMIT 1")
+    last_salary = cursor.fetchone()
+
+    if last_salary:
+        last_salary_date_str = cursor.execute("SELECT date FROM expenses WHERE name='Salary' ORDER BY date DESC LIMIT 1").fetchone()
+        last_salary_date = datetime.strptime(last_salary_date_str[0], "%Y-%m-%d").date()
+        today = date.today()
+        if last_salary_date.month == today.month and today.day != 1:
+            # If the last salary is for the current month and it's not the first of the month, use the last salary amount
+            balance = last_salary[0] + get_total_income() - get_total_expenses()
+        else:
+            # If it's the first of the month or there is no last salary, prompt the user for the salary
+            salary = prompt_salary()
+            if salary is None:
+                # If the user cancels the prompt, set the balance as N/A
+                balance = "N/A"
+            else:
+                # Insert the new salary entry into the database
+                cursor.execute("INSERT INTO expenses (name, amount, date) VALUES (?, ?, ?)", ("Salary", salary, today))
+                connection.commit()
+                balance = salary + get_total_income() - get_total_expenses()
+    else:
+        # If there are no salary entries, prompt the user for the salary
+        salary = prompt_salary()
+        if salary is None:
+            # If the user cancels the prompt, set the balance as N/A
+            balance = "N/A"
+        else:
+            # Insert the new salary entry into the database
+            cursor.execute("INSERT INTO expenses (name, amount, date) VALUES (?, ?, ?)", ("Salary", salary, date.today()))
+            connection.commit()
+            balance = salary + get_total_income() - get_total_expenses()
+
     label_balance.config(text=f"Current Balance: ${balance:.2f}" if isinstance(balance, float) else f"Current Balance: {balance}")
 
+# Function to prompt the user for the salary
+def prompt_salary():
+    return simpledialog.askfloat("Add Salary", "Enter your salary:")
 
 # Function to get the total expenses
 def get_total_expenses():
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name!='Income'")
+    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name!='Salary'")
     total_expenses = cursor.fetchone()[0] or 0
     return total_expenses
 
+# Function to get the total income
+def get_total_income():
+    cursor.execute("SELECT SUM(amount) FROM expenses WHERE name='Income'")
+    total_income = cursor.fetchone()[0] or 0
+    return total_income
 
 # Function to update the expense history
 def update_expense_history():
@@ -101,6 +133,8 @@ def add_expense():
         connection.commit()
         update_balance()
         update_expense_history
+
+#Function to add an income        
 def add_income():
     name = "Income"
     amount = simpledialog.askfloat("Add Income", "How much income did you receive?")
@@ -186,38 +220,11 @@ label_income.grid(row=0, column=0, padx=5)
 button_add_income = tk.Button(frame_income_input, text="Add Income", command=add_income)
 button_add_income.grid(row=0, column=1, padx=5)
 
-frame_income_history = tk.Frame(tab_income)
-frame_income_history.pack(pady=20)
+frame_income_history = ttk.LabelFrame(tab_income, text="Income History", padding=10)
+frame_income_history.pack(pady=20, fill='both', expand=True)
 
-label_income_history = tk.Label(frame_income_history, text="Income History:", font=("Arial", 18))
-label_income_history.pack()
-
-text_income_history = tk.Text(frame_income_history, width=40, height=10, state=tk.DISABLED)
-text_income_history.pack()
-
-# Function to update the income history
-def update_income_history():
-    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name='Income' ORDER BY date DESC")
-    incomes = cursor.fetchall()
-    text_income_history.config(state=tk.NORMAL)
-    text_income_history.delete("1.0", tk.END)
-    for income in incomes:
-        name, amount, details, date_str = income
-        text_income_history.insert(tk.END, f"{date_str} - {name}: ${amount:.2f}\nDetails: {details}\n")
-    text_income_history.config(state=tk.DISABLED)
-
-# Function to add an expense
-def add_expense():
-    name = combo_expense.get()
-    amount = simpledialog.askfloat("Add Expense", f"How much did you spend on {name}?")
-    if amount is not None:
-        details = simpledialog.askstring("Expense Details", "Enter the details of your expense:")
-        today = date.today()
-        cursor.execute("INSERT INTO expenses (name, amount, details, date) VALUES (?, ?, ?, ?)",
-                       (name, amount, details, today))
-        connection.commit()
-        update_balance()
-        update_expense_history()
+text_income_history = scrolledtext.ScrolledText(frame_income_history, width=40, height=10)
+text_income_history.pack(fill='both', expand=True)
 
 # Create the expenses tab
 tab_expenses = ttk.Frame(window)
@@ -235,14 +242,11 @@ combo_expense.grid(row=0, column=1, padx=5)
 button_add_expense = tk.Button(frame_expense_input, text="Add Expense", command=add_expense)
 button_add_expense.grid(row=0, column=2, padx=5)
 
-frame_expense_history = tk.Frame(tab_expenses)
-frame_expense_history.pack(pady=20)
+frame_expense_history = ttk.LabelFrame(tab_expenses, text="Expense History", padding=10)
+frame_expense_history.pack(pady=20, fill='both', expand=True)
 
-label_expense_history = tk.Label(frame_expense_history, text="Expense History:", font=("Arial", 18))
-label_expense_history.pack()
-
-text_expense_history = tk.Text(frame_expense_history, width=40, height=10, state=tk.DISABLED)
-text_expense_history.pack()
+text_expense_history = scrolledtext.ScrolledText(frame_expense_history, width=40, height=10)
+text_expense_history.pack(fill='both', expand=True)
 
 button_plot_expenses = tk.Button(tab_expenses, text="Plot Expense Breakdown", command=plot_expense_breakdown)
 button_plot_expenses.pack(pady=10)
@@ -262,4 +266,3 @@ window.mainloop()
 
 # Close the database connection
 connection.close()
-
