@@ -35,6 +35,7 @@ cursor.execute(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         amount REAL,
+        details TEXT,
         date TEXT
     )
     """
@@ -95,14 +96,16 @@ def get_total_expenses():
 
 # Function to update the expense history
 def update_expense_history():
-    cursor.execute("SELECT name, amount, date FROM expenses WHERE name!='Salary' ORDER BY date DESC LIMIT 5")
+    cursor.execute("SELECT name, amount, details, date FROM expenses WHERE name!='Salary' ORDER BY date DESC LIMIT 5")
     expenses = cursor.fetchall()
     text_expense_history.config(state=tk.NORMAL)
     text_expense_history.delete("1.0", tk.END)
     for expense in expenses:
-        name, amount, date_str = expense
-        text_expense_history.insert(tk.END, f"{date_str} - {name}: ${amount:.2f}\n")
+        name, amount, details, date_str = expense
+        text_expense_history.insert(tk.END, f"{date_str} - {name}: ${amount:.2f}\nDetails: {details}\n")
     text_expense_history.config(state=tk.DISABLED)
+
+
 
 
 # Function to add an expense
@@ -110,11 +113,15 @@ def add_expense():
     name = combo_expense.get()
     amount = simpledialog.askfloat("Add Expense", f"How much did you spend on {name}?")
     if amount is not None:
+        details = simpledialog.askstring("Expense Details", "Enter the details of your expense:")
         today = date.today()
-        cursor.execute("INSERT INTO expenses (name, amount, date) VALUES (?, ?, ?)", (name, amount, today))
+        cursor.execute("INSERT INTO expenses (name, amount, details, date) VALUES (?, ?, ?, ?)",
+                       (name, amount, details, today))
         connection.commit()
         update_balance()
         update_expense_history()
+
+
 
 # Function to reset the app and erase all data
 def reset_app():
